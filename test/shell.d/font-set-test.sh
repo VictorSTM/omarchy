@@ -236,8 +236,10 @@ if ((resolvable)); then
   mapfile -t candidates < <(installed_mono_families | grep -i mono | grep -Fxv "$packaged_family")
   chosen=${candidates[0]:-}
   # A name sharing any file with the chosen font would resolve to it either way.
-  # Given as a property, so a hyphen in the name is not read as a size.
+  # Given as a property, so a hyphen in the name is not read as a size, and a
+  # name fc-list still misreads finds no files and is passed over.
   for candidate in "${candidates[@]:1}"; do
+    [[ -n $(fc-list ":family=$candidate" file) ]] || continue
     if [[ -z $(comm -12 <(fc-list ":family=$candidate" file | sort) <(fc-list ":family=$chosen" file | sort)) ]]; then
       named=$candidate
       break
