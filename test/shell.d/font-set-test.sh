@@ -235,7 +235,13 @@ fi
 if ((resolvable)); then
   mapfile -t candidates < <(installed_mono_families | grep -i mono | grep -Fxv "$packaged_family")
   chosen=${candidates[0]:-}
-  named=${candidates[1]:-}
+  # Another name for the chosen font's own file would resolve to it either way.
+  for candidate in "${candidates[@]:1}"; do
+    if [[ $(fc-list "$candidate" file | sort) != "$(fc-list "$chosen" file | sort)" ]]; then
+      named=$candidate
+      break
+    fi
+  done
   [[ -n $chosen && -n $named ]] || resolvable=0
 fi
 
