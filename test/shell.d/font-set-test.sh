@@ -58,7 +58,7 @@ expected_override() {
 <!DOCTYPE fontconfig SYSTEM "fonts.dtd">
 <fontconfig>
   <alias binding="strong">
-    <family>monospace</family>
+    <family>Omarchy Fixed Pitch</family>
     <prefer>
       <family>$1</family>
     </prefer>
@@ -78,20 +78,15 @@ set_font() {
     bash "$ROOT/bin/omarchy-font-set" "$1" >/dev/null
 }
 
-# --- The generic keeps its place in the family list ---------------------------
+# --- The generic leaves a placeholder for the user file ------------------------
 
-# Read as XML rather than as text. Both properties hold or not regardless of how
-# a rule is spelled, where matching the spelling would accept a rule that
-# consumes the generic without `qual="any"` and reject an append that behaves
-# exactly like the one shipped.
+# Read as XML rather than as text, so the check holds however the rule is
+# spelled. The generic has to be consumed, or 60-latin.conf and 65-nonlatin.conf
+# put their own monospace lists ahead of every CJK fallback 50-omarchy.conf adds.
 packaged=$(python3 - "$default_fontconfig" <<'PYTHON'
 import sys, xml.etree.ElementTree as ET
 
 root = ET.parse(sys.argv[1]).getroot()
-
-# Anything that replaces the element it matched, or jumps the head of the list,
-# takes the generic away from the user file fontconfig loads next.
-CONSUMING = {"assign", "assign_replace", "prepend_first"}
 
 def matches_generic(match):
   if match.get("target") not in (None, "pattern"):
@@ -100,40 +95,21 @@ def matches_generic(match):
              for test in match.findall("test") if test.get("name") == "family"
              for string in test.findall("string"))
 
-consumed = [edit.get("mode", "assign")
-            for match in root.findall("match") if matches_generic(match)
-            for edit in match.findall("edit")
-            if edit.get("name") == "family" and edit.get("mode", "assign") in CONSUMING]
+edits = ["%s %s %s" % (edit.get("mode", "assign"),
+                              ", ".join((string.text or "").strip() for string in edit.findall("string")),
+                              edit.get("binding") or "weak")
+                for match in root.findall("match") if matches_generic(match)
+                for edit in match.findall("edit") if edit.get("name") == "family"]
 
-# The packaged family may arrive as an alias default or as an appending edit;
-# either one leaves the generic in place for the user override to match on.
-fallbacks = ["%s %s" % ((family.text or "").strip(), alias.get("binding") or "weak")
-             for alias in root.findall("alias")
-             if alias.find("family") is not None
-             and (alias.find("family").text or "").strip() == "monospace"
-             for default in alias.findall("default")
-             for family in default.findall("family")]
-
-fallbacks += ["%s %s" % ((string.text or "").strip(), edit.get("binding") or "weak")
-              for match in root.findall("match") if matches_generic(match)
-              for edit in match.findall("edit")
-              if edit.get("name") == "family" and edit.get("mode") in ("append", "append_last")
-              for string in edit.findall("string")]
-
-print("consumed:", ", ".join(consumed) if consumed else "nothing")
-print("fallback:", "; ".join(fallbacks) if fallbacks else "none")
+print("edits:", "; ".join(edits) if edits else "nothing")
 PYTHON
 )
 
-[[ $packaged == *"consumed: nothing"* ]] ||
-  fail "the packaged default leaves the monospace generic in the pattern" "$packaged"
-pass "the packaged default leaves the monospace generic in the pattern"
-
-# The strong binding is load-bearing: weak, and 60-latin.conf's own monospace
-# list outranks it on a machine that has chosen no font.
-[[ $packaged == *"fallback: JetBrainsMono Nerd Font strong"* ]] ||
-  fail "the packaged default names its own family after the generic, strongly bound" "$packaged"
-pass "the packaged default names its own family after the generic, strongly bound"
+# The strong binding is load-bearing: weak, and the untargeted strong Naskh
+# fallback outranks it on a machine that has chosen no font.
+[[ $packaged == *"assign Omarchy Fixed Pitch, JetBrainsMono Nerd Font strong"* ]] ||
+  fail "the packaged default replaces the generic with the placeholder, then its own family, strongly bound" "$packaged"
+pass "the packaged default replaces the generic with the placeholder, then its own family, strongly bound"
 
 # --- omarchy-font-set writes the alias ---------------------------------------
 
@@ -285,6 +261,17 @@ if ((resolvable)); then
   resolved_to "$answer" "$named" ||
     fail "a named mono family still resolves to itself" "$named -> $answer, chosen was $chosen"
   pass "a named mono family still resolves to itself"
+
+  answer=$(resolve "$packaged_family")
+  resolved_to "$answer" "$packaged_family" ||
+    fail "the packaged family named outright still resolves to itself" "$packaged_family -> $answer, chosen was $chosen"
+  pass "the packaged family named outright still resolves to itself"
+
+  # Escaped, or fc-match reads the hyphen as the start of a size.
+  answer=$(resolve 'ui\-monospace')
+  resolved_to "$answer" "$chosen" ||
+    fail "the chosen family follows ui-monospace" "ui-monospace -> $answer, wanted $chosen"
+  pass "the chosen family follows ui-monospace"
 else
   pass "no fontconfig fixture on this machine; skipping resolution checks"
 fi

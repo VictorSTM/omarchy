@@ -8,7 +8,8 @@ echo "Rewrite the font override that captured every family named *mono*"
 # ahead of the family the application actually asked for. Every install that
 # picked a font since then carries that file, and rewriting it only happens on
 # the next pick. Restate it as the alias it should have been, which inserts the
-# family at the generic instead of at the head.
+# family where the packaged default left the generic's placeholder instead of at
+# the head.
 
 fontconfig_file="$HOME/.config/fontconfig/fonts.conf"
 
@@ -44,7 +45,7 @@ cat >"$fontconfig_file" <<XML
 <!DOCTYPE fontconfig SYSTEM "fonts.dtd">
 <fontconfig>
   <alias binding="strong">
-    <family>monospace</family>
+    <family>Omarchy Fixed Pitch</family>
     <prefer>
       <family>$font_name</family>
     </prefer>
